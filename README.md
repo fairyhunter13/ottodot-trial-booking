@@ -239,4 +239,4 @@ curl localhost:8080/api/classes/c2/roster
 
 ## Time spent
 
-About 2 hours of build, plus the reading and the planning before it.
+About 4 hours, the reading and the planning included.
