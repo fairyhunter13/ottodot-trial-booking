@@ -1,5 +1,5 @@
-// Package fixture builds a throwaway database per test. Tests state the state they need and
-// nothing else, so no test depends on the demo seed.
+// Package fixture builds a throwaway database per test. Each test creates only the data it
+// needs, so no test depends on the demo seed.
 package fixture
 
 import (
@@ -88,8 +88,8 @@ func (f *Fix) Count(query string, args ...any) int {
 	return n
 }
 
-// AssertInvariants fails the test when either database rule is broken, whatever the test was
-// actually looking at.
+// AssertInvariants fails the test when either database rule breaks, whatever else that test
+// examined.
 func AssertInvariants(t *testing.T, db *sql.DB) {
 	t.Helper()
 	var over, dup int

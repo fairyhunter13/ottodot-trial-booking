@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Every line of the Ottodot brief is one row below. A row that stops being true fails the build.
+# Every line of the Ottodot brief is one row below. A row that becomes false fails the build.
 #
 #   ./scripts/brief-check.sh            every row must hold
 #   ./scripts/brief-check.sh --honest   every row must fail when its own break is applied
 #   ./scripts/brief-check.sh --prose    print the prose findings, and change nothing
 #
 # The honest pass is the reason to trust the rest. A row that passes whatever the repo says is
-# decoration, so each row carries the exact edit that must make it fail.
+# decoration. So each row carries the exact edit that must make that row fail.
 set -uo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -226,11 +226,11 @@ row D3 "booking statuses used" \
   "section_has README.md '### Booking statuses' pending_payment confirmed payment_failed cancelled" \
   "sed -i 's/cancelled/dropped/g' README.md"
 row D4 "how you prevent duplicate bookings" \
-  "section README.md '### How duplicates are prevented' 200" \
-  "sed -i '/^### How duplicates are prevented/,/^#/{/^#/!d}' README.md"
+  "section README.md '### How I stop a duplicate' 200" \
+  "sed -i '/^### How I stop a duplicate/,/^#/{/^#/!d}' README.md"
 row D5 "how you handle payment failure" \
-  "section README.md '### How payment failure is handled' 200" \
-  "sed -i '/^### How payment failure is handled/,/^#/{/^#/!d}' README.md"
+  "section README.md '### How I handle a failed payment' 200" \
+  "sed -i '/^### How I handle a failed payment/,/^#/{/^#/!d}' README.md"
 row D6 "how you handle two users competing for the last seat" \
   "section README.md '### How two users compete for the last seat' 400" \
   "sed -i '/^### How two users compete for the last seat/,/^#/{/^#/!d}' README.md"

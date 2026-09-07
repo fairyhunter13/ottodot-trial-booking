@@ -117,7 +117,7 @@ func (s *Server) render(w http.ResponseWriter, name string, code int, data any) 
 	}
 }
 
-// fail turns a rule error into the status code the rule deserves.
+// fail turns a rule error into the status code for that rule.
 func (s *Server) fail(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 	switch {

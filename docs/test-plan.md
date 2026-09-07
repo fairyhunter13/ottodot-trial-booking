@@ -4,8 +4,8 @@ The build plan is in [development-plan.md](development-plan.md).
 
 ## Edge cases
 
-Each case carries an id. The id is the subtest name, so the coverage list is the test output and not
-a claim in a document.
+Each case carries an id. The id is the subtest name, so the test output is the coverage list. No
+document has to claim the coverage.
 
 ```
 go test ./internal/... -v -run 'TestCreate|TestPayStates'
@@ -25,7 +25,7 @@ go test ./internal/... -v -run 'TestCreate|TestPayStates'
 | EC-08 | unknown class | 404 |
 | EC-09 | child of another parent | 403 |
 | EC-10 | two identical creates at the same instant | one row, the rest refused as duplicates, never a 500 |
-| EC-20 | class has already started | refused |
+| EC-20 | the class already started | refused |
 
 ### Pay
 
@@ -44,38 +44,38 @@ go test ./internal/... -v -run 'TestCreate|TestPayStates'
 | EC-22 | one goroutine creates while another confirms the last seat | either order, invariant holds |
 | EC-23 | two payers, two free seats | **both** confirm |
 
-`EC-23` is the case an earlier draft of this plan missed. Every capacity test above still passes if
-the guard refuses everything, so without `EC-23` an over-strict lock reads as correct.
+An earlier draft of this plan missed `EC-23`. Every capacity test above still passes when the guard
+refuses everything. So without `EC-23`, an over-strict lock reads as correct.
 
 ### Roster and money
 
-Pending, failed and cancelled rows never appear on a roster. An unknown class is a 404. A
-`payment_failed` row must not carry `refund_required`, and a `seat_taken` row must.
+Pending, failed and cancelled rows never appear on a roster. An unknown class returns a 404. A
+`payment_failed` row must not carry `refund_required`, and a `seat_taken` row must carry it.
 
 ## Three layers, two datasets
 
 ### Two datasets, and why they are not one
 
-The demo seed and the test data answer different questions. Where one file serves both, a change to
+The demo seed and the test data answer different questions. When one file serves both, a change to
 the demo breaks a test that has nothing to do with the demo.
 
 - `seed.sql` is the **demo** dataset. It exists for `go run .` and for the video.
-- Test data is built **per test, in Go**, from an empty schema. A test states the state it needs and
-  nothing else.
+- Each test builds its own data **in Go**, from an empty schema. A test states the state it needs,
+  and nothing more.
 
-The seed is not trusted either. `TestSeedMeetsBrief` loads `seed.sql` and asserts that the four
+I do not trust the seed either. `TestSeedMeetsBrief` loads `seed.sql` and asserts that the four
 asked cases are really in it:
 
 - a class with free seats
 - a class with exactly 3 confirmed students
-- a child already booked, so a duplicate attempt is reachable
+- a child already booked, so a test can reach a duplicate attempt
 - a `payment_failed` row
 
-So the demo cannot rot silently, and no other test depends on it.
+So a broken demo fails a test, and no other test depends on the demo.
 
 ### The fixture builder
 
-`internal/fixture`. It is the reason 23 cases do not become 23 setup blocks.
+`internal/fixture`. The builder is the reason 23 cases do not become 23 setup blocks.
 
 ```go
 f := fixture.New(t)                    // temp db, schema applied, empty
@@ -86,18 +86,17 @@ b := f.Booking(s, c, "pending_payment")
 
 ### The invariant net
 
-`fixture.AssertInvariants` runs after every test through `t.Cleanup`. It is two SQL queries: no class
-holds more confirmed rows than its capacity, and no child holds two live rows for one class. A test
-that breaks an invariant fails, even where that test was looking at something else. So one helper
-covers cases nobody wrote a test for.
+`fixture.AssertInvariants` runs after every test through `t.Cleanup`. The helper is two SQL queries:
+no class holds more confirmed rows than its capacity, and no child holds two live rows for one
+class. A test that breaks an invariant fails, even when that test examined something else. One
+helper therefore covers cases nobody wrote a test for.
 
 ### Concurrency tests that fail for the right reason
 
 - The DSN carries `busy_timeout(5000)`, `journal_mode(WAL)` and `foreign_keys(1)`. Without the busy
-  timeout a second writer gets `SQLITE_BUSY` at once, and the test reports a lock error rather than a
-  lost race. `TestSchemaPragmas` asserts these, so a typo in the DSN fails a test instead of silently
-  turning off a guard.
-- Every goroutine waits on one closed channel, so they fire together instead of in a queue.
+  timeout a second writer gets `SQLITE_BUSY` at once. The test then reports a lock error, and not a
+  lost race. `TestSchemaPragmas` asserts these three, so a typo in the DSN fails a test.
+- Every goroutine waits on one closed channel, so they all start together and never queue.
 - The concurrency tests run under `-race` and `-count=5`, because a race that appears one run in
   three is still a race.
 
@@ -123,7 +122,7 @@ Against a real SQLite file, no HTTP.
 ### Layer 2 — endpoint tests (`internal/web`)
 
 Through `httptest`, over the real router and the real templates. A package test never sees a broken
-template or a wrong status code, and both are failures a reviewer would hit.
+template or a wrong status code, and a reviewer meets both.
 
 | Test | Asserts |
 | --- | --- |
@@ -134,17 +133,17 @@ template or a wrong status code, and both are failures a reviewer would hit.
 
 ### Layer 3 — one integration test
 
-`TestParentJourney` walks the demo path over HTTP. It opens the page, books a seat, pays and fails,
-books again, pays and succeeds, then reads the roster and finds the child. It is the same path as the
-video, so a green test proves the demo works.
+`TestParentJourney` walks the demo path over HTTP. It opens the page, books a seat, and pays with a
+failure. It then books again, pays with a success, reads the roster, and finds the child. The test
+walks the same path as the video, so a green test proves the demo works.
 
-## Proof that a case is handled, and not only tested
+## Proof that a guard holds, and not only that a test passes
 
-A green suite is not proof. A test that passes against broken code proves nothing, so each guard has
-a mutation that must break a named test.
+A green suite is not proof. A test that passes against broken code proves nothing, so each guard
+carries a mutation that must break a named test.
 
-`scripts/mutate.sh` copies the tree to a temp directory, applies one edit, runs the suite, records
-which tests failed, and throws the copy away. The working tree is never edited.
+`scripts/mutate.sh` copies the tree to a temp directory. It applies one edit, runs the suite, and
+records which tests failed. It then deletes the copy. The script never edits the working tree.
 
 | Mutation | The guard it removes | Result |
 | --- | --- | --- |
@@ -154,27 +153,27 @@ which tests failed, and throws the copy away. The working tree is never edited.
 | confirm always returns `seat_taken` | the happy path | caught by `TestConcurrentDistinctSeats` |
 | drop `AND status='pending_payment'` | second confirm of one booking | **survives, by design** |
 
-The fourth mutation catches an over-strict guard. A lock that refuses every booking satisfies every
-capacity test, so the suite must also fail when the code refuses too much.
+The confirm-always-fails mutation catches an over-strict guard. A lock that refuses every booking
+satisfies every capacity test. So the suite must also fail when the code refuses too much.
 
-The fifth mutation survives, and that is reported rather than hidden. `Pay` reads the booking status
-inside the same `BEGIN IMMEDIATE` transaction that later writes it, and that transaction holds the
-write lock for its whole life. So the read and the write are already one step. The status guard in
-the `UPDATE` is then a second line of defence behind a stronger first one. No test can reach past the
-first guard to see the second, so no test is written that pretends to. The guard stays, because it
-keeps `settle` safe for a caller that does not hold the same transaction.
+The status-guard mutation survives, and the script reports it rather than hiding it. `Pay` reads the
+booking status inside the same `BEGIN IMMEDIATE` transaction that later writes it, and that
+transaction holds the write lock for its whole life. So the read and the write are already one step.
+The status guard in the `UPDATE` is a second guard behind a stronger first one. No test can see
+behind the first guard to reach the second, so I wrote no test that only pretends to. The guard
+stays, because it keeps `settle` safe for a caller outside that transaction.
 
-Every other mutation the suite survives is a hole in the tests, and not a pass. Where one appears,
-the missing test is written first, then the run repeats.
+Any other mutation that the suite survives is a hole in the tests, and not a pass. When one appears,
+I write the missing test first. I then repeat the run.
 
 ## The fix loop
 
-A failing case is fixed in the layer the layer table names, and never in two layers at once. The
+Fix a failing case in the one layer the layer table names, and never in two layers at once. The
 order is fixed:
 
 1. Write the failing test.
 2. Fix the code.
-3. `go test ./... -race`.
+3. Run `go test ./... -race`.
 4. Re-run `scripts/mutate.sh` in full, because a fix in one place often weakens a guard somewhere
    else.
 
@@ -188,9 +187,9 @@ check fail. `./scripts/brief-check.sh` runs every check against the real tree. `
 tree, applies one row's break inside the copy, and runs that row's check again there. A row that
 still passes is decoration, and the run fails.
 
-A row reads a file or the test log, and never a claim. Where a row covers an edge case, it asserts
-that the named subtest ran and passed. So the checker proves presence and wiring, and it does not
-grade the quality of the prose behind a heading.
+A row reads a file or the test log, and never a claim. When a row covers an edge case, it asserts
+that the named subtest ran and passed. So the checker proves presence and wiring. The checker does not grade
+the quality of the prose behind a heading.
 
 Commands: `go vet ./...`, `go test ./... -race -count=1`, `scripts/mutate.sh`,
 `scripts/brief-check.sh` and `scripts/brief-check.sh --honest`. GitHub Actions runs all five on

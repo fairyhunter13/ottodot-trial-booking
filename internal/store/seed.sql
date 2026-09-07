@@ -17,7 +17,7 @@ INSERT INTO students (id, parent_id, name, grade) VALUES
   ('s10', 'p4', 'Fajar', 'Grade 6'),
   ('s11', 'p4', 'Maya',  'Grade 2');
 
--- c1 has seats free, c2 has exactly one seat left, c3 is full.
+-- c1 has free seats, c2 has exactly one seat left, c3 is full.
 INSERT INTO trial_classes (id, subject, starts_at, capacity) VALUES
   ('c1', 'Math Trial',    datetime('now', '+2 days'), 4),
   ('c2', 'Science Trial', datetime('now', '+3 days'), 4),

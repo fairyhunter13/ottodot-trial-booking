@@ -30,7 +30,7 @@ var (
 	ErrForbidden          = errors.New("child does not belong to this parent")
 	ErrDuplicate          = errors.New("this child already has a live booking for this class")
 	ErrClassFull          = errors.New("class is full")
-	ErrClassStarted       = errors.New("class has already started")
+	ErrClassStarted       = errors.New("the class already started")
 	ErrNotAwaitingPayment = errors.New("booking is not awaiting payment")
 )
 
@@ -75,7 +75,8 @@ type RosterEntry struct {
 	ParentName  string `json:"parent_name"`
 }
 
-// Create opens a booking in pending_payment. It holds no seat: the seat is counted at confirm time.
+// Create opens a booking in pending_payment. The booking holds no seat. The code counts the seat
+// at confirm time.
 func (s *Store) Create(ctx context.Context, parentID, studentID, classID string) (Booking, error) {
 	var ownerID string
 	err := s.db.QueryRowContext(ctx, `SELECT parent_id FROM students WHERE id = ?`, studentID).Scan(&ownerID)
@@ -124,8 +125,8 @@ func (s *Store) Create(ctx context.Context, parentID, studentID, classID string)
 // Pay records a payment attempt and settles the booking.
 //
 // The seat count and the status change run inside one BEGIN IMMEDIATE transaction, so two payers
-// cannot both win the last seat. The loser is cancelled with reason seat_taken, and the attempt is
-// flagged for a refund.
+// cannot both win the last seat. The loser ends cancelled with reason seat_taken, and Pay flags
+// the attempt row for a refund.
 func (s *Store) Pay(ctx context.Context, bookingID string, success bool) (Booking, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
@@ -186,7 +187,7 @@ func (s *Store) Pay(ctx context.Context, bookingID string, success bool) (Bookin
 }
 
 // settle writes the booking status and the payment attempt in one step.
-// The status guard in the UPDATE is what makes a repeated submit a no-op.
+// The status guard in the UPDATE makes a repeated submit change nothing.
 func settle(ctx context.Context, conn *sql.Conn, bookingID, status, reason, outcome string, refund bool) error {
 	res, err := conn.ExecContext(ctx, `
 		UPDATE bookings SET status = ?, reason = ?, updated_at = datetime('now')

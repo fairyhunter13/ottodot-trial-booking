@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Break one guard at a time in a copy of the tree, and check that a named test notices.
+# Break one guard at a time in a copy of the tree.
+# Then check that a named test notices.
 # A green suite is not proof. A mutation that survives is a hole in the tests.
 set -uo pipefail
 
@@ -8,7 +9,7 @@ pass=0
 fail=0
 
 # An expected test name means that test must fail.
-# The word SURVIVES means the guard is defence in depth behind a stronger one.
+# The word SURVIVES means the guard is a second guard behind a stronger one.
 # No test can reach such a guard, and the script must not call that a pass.
 run_mutation() {
   local name=$1 expect=$2 edit=$3

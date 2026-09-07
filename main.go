@@ -13,7 +13,7 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	path := flag.String("db", "data.db", "sqlite file")
-	keep := flag.Bool("keep", false, "keep the existing database instead of rebuilding the demo seed")
+	keep := flag.Bool("keep", false, "keep the existing database, and do not rebuild the demo seed")
 	flag.Parse()
 
 	if !*keep {

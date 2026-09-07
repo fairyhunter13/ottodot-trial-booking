@@ -15,8 +15,8 @@ var Schema string
 //go:embed seed.sql
 var Seed string
 
-// busy_timeout matters: without it a second writer fails with SQLITE_BUSY instead of waiting,
-// and a lost race looks like a lock error.
+// busy_timeout matters. Without it a second writer fails with SQLITE_BUSY and does not wait.
+// A lost race then reads as a lock error.
 const params = "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)"
 
 // Open applies the schema to path. It applies the demo seed too when seed is true.

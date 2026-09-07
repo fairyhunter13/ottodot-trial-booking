@@ -72,7 +72,7 @@ func TestCreate(t *testing.T) {
 			return f.Parent(), f.Student(f.Parent()), f.Class(4, 0)
 		}, booking.ErrForbidden},
 
-		{"EC-20_class_has_already_started", func(f *fixture.Fix) (string, string, string) {
+		{"EC-20_the_class_already_started", func(f *fixture.Fix) (string, string, string) {
 			p := f.Parent()
 			return p, f.Student(p), f.ClassAt("-1 hour", 4)
 		}, booking.ErrClassStarted},
@@ -157,7 +157,7 @@ func TestPayStates(t *testing.T) {
 	})
 }
 
-// EC-13: a parent who submits the pay form twice must not be charged twice.
+// EC-13: a parent who submits the pay form twice pays only once.
 func TestDoublePayIsNoop(t *testing.T) {
 	t.Run("EC-13 the pay form submitted twice", func(t *testing.T) {
 		f := fixture.New(t)
@@ -235,7 +235,7 @@ func TestConcurrentLastSeat(t *testing.T) {
 	})
 }
 
-// EC-19: the same booking paid by two browser tabs.
+// EC-19: one booking, paid from two browser tabs.
 func TestConcurrentSameBooking(t *testing.T) {
 	t.Run("EC-19 the same booking paid twice at once", func(t *testing.T) {
 		f := fixture.New(t)
@@ -366,7 +366,7 @@ func TestConcurrentCreateAndConfirm(t *testing.T) {
 	})
 }
 
-// The demo seed is data, so it is tested like data.
+// The demo seed is data, so a test reads it like data.
 // Each subtest is named for its row in the brief checklist, so scripts/brief-check.sh reads the
 // result from the test log and writes no SQL of its own.
 func TestSeedMeetsBrief(t *testing.T) {
@@ -396,7 +396,7 @@ func TestSeedMeetsBrief(t *testing.T) {
 	}
 }
 
-// A typo in the DSN would turn a guard off without failing anything else.
+// A typo in the DSN disables a guard, and no other test fails.
 func TestSchemaPragmas(t *testing.T) {
 	f := fixture.New(t)
 	var fk, journal string

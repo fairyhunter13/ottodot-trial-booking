@@ -28,7 +28,7 @@ func newApp(t *testing.T) *app {
 	srv := httptest.NewServer(web.NewServer(f.DB).Routes())
 	t.Cleanup(srv.Close)
 	return &app{Fix: f, t: t, srv: srv, client: &http.Client{
-		// A 303 must be visible to the test, because the route table promises it.
+		// The test must see the 303, because the route table promises it.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}}
 }
@@ -128,7 +128,7 @@ func TestRoutesStatusCodes(t *testing.T) {
 	}
 }
 
-// A template that panics returns a 200 with a half-written page, so each page is opened once.
+// A template that panics returns a 200 with a half-written page, so this test opens each page once.
 func TestEveryTemplateRenders(t *testing.T) {
 	a := newApp(t)
 	parent := a.Parent()
@@ -139,7 +139,7 @@ func TestEveryTemplateRenders(t *testing.T) {
 		{"index.html", "/?parent=" + parent, "Trial class"},
 		{"booking.html", "/bookings/" + id, "Mock payment"},
 		{"roster.html", "/classes/" + class + "/roster", "Teacher roster"},
-		{"error.html", "/bookings/nothing", "not possible"},
+		{"error.html", "/bookings/nothing", "cannot make"},
 	}
 	for _, p := range pages {
 		t.Run(p.name, func(t *testing.T) {
