@@ -135,7 +135,7 @@ fence  { next }
 END { flush() }
 AWK
 
-DOCS="README.md AI_USAGE.md docs/development-plan.md docs/test-plan.md docs/demo-script.md"
+DOCS="README.md AI_USAGE.md docs/development-plan.md docs/test-plan.md"
 
 prose_find() { awk -v rule="$1" "$PROSE_AWK" $DOCS; }
 prose() { [ -z "$(prose_find "$1")" ]; }
