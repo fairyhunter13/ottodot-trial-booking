@@ -159,23 +159,25 @@ func TestPayStates(t *testing.T) {
 
 // EC-13: a parent who submits the pay form twice must not be charged twice.
 func TestDoublePayIsNoop(t *testing.T) {
-	f := fixture.New(t)
-	st := booking.New(f.DB)
-	class := f.Class(4, 3)
-	id := f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
+	t.Run("EC-13 the pay form submitted twice", func(t *testing.T) {
+		f := fixture.New(t)
+		st := booking.New(f.DB)
+		class := f.Class(4, 3)
+		id := f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
 
-	for i := 0; i < 2; i++ {
-		b, err := st.Pay(ctx, id, true)
-		if err != nil || b.Status != booking.StatusConfirmed {
-			t.Fatalf("submit %d: status %q err %v", i+1, b.Status, err)
+		for i := 0; i < 2; i++ {
+			b, err := st.Pay(ctx, id, true)
+			if err != nil || b.Status != booking.StatusConfirmed {
+				t.Fatalf("submit %d: status %q err %v", i+1, b.Status, err)
+			}
 		}
-	}
-	if n := f.Count(`SELECT COUNT(*) FROM payment_attempts WHERE booking_id = ?`, id); n != 1 {
-		t.Fatalf("payment attempts = %d, want 1", n)
-	}
-	if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
-		t.Fatalf("confirmed = %d, want 4", n)
-	}
+		if n := f.Count(`SELECT COUNT(*) FROM payment_attempts WHERE booking_id = ?`, id); n != 1 {
+			t.Fatalf("payment attempts = %d, want 1", n)
+		}
+		if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
+			t.Fatalf("confirmed = %d, want 4", n)
+		}
+	})
 }
 
 // The brief's four steps, in order.
@@ -212,147 +214,161 @@ func TestScriptedLastSeat(t *testing.T) {
 
 // EC-18: many payers, one seat.
 func TestConcurrentLastSeat(t *testing.T) {
-	f := fixture.New(t)
-	st := booking.New(f.DB)
-	class := f.Class(4, 3)
+	t.Run("EC-18 many payers, one seat", func(t *testing.T) {
+		f := fixture.New(t)
+		st := booking.New(f.DB)
+		class := f.Class(4, 3)
 
-	ids := make([]string, 16)
-	for i := range ids {
-		p := f.Parent()
-		ids[i] = f.Booking(f.Student(p), class, booking.StatusPending)
-	}
+		ids := make([]string, 16)
+		for i := range ids {
+			p := f.Parent()
+			ids[i] = f.Booking(f.Student(p), class, booking.StatusPending)
+		}
 
-	results := payTogether(t, st, ids)
-	if n := countStatus(results, booking.StatusConfirmed); n != 1 {
-		t.Fatalf("winners = %d, want 1", n)
-	}
-	if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
-		t.Fatalf("confirmed = %d, want 4", n)
-	}
+		results := payTogether(t, st, ids)
+		if n := countStatus(results, booking.StatusConfirmed); n != 1 {
+			t.Fatalf("winners = %d, want 1", n)
+		}
+		if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
+			t.Fatalf("confirmed = %d, want 4", n)
+		}
+	})
 }
 
 // EC-19: the same booking paid by two browser tabs.
 func TestConcurrentSameBooking(t *testing.T) {
-	f := fixture.New(t)
-	st := booking.New(f.DB)
-	class := f.Class(4, 3)
-	id := f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
+	t.Run("EC-19 the same booking paid twice at once", func(t *testing.T) {
+		f := fixture.New(t)
+		st := booking.New(f.DB)
+		class := f.Class(4, 3)
+		id := f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
 
-	ids := make([]string, 8)
-	for i := range ids {
-		ids[i] = id
-	}
-	payTogether(t, st, ids)
+		ids := make([]string, 8)
+		for i := range ids {
+			ids[i] = id
+		}
+		payTogether(t, st, ids)
 
-	if n := f.Count(`SELECT COUNT(*) FROM payment_attempts WHERE booking_id = ?`, id); n != 1 {
-		t.Fatalf("payment attempts = %d, want 1", n)
-	}
-	if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
-		t.Fatalf("confirmed = %d, want 4", n)
-	}
+		if n := f.Count(`SELECT COUNT(*) FROM payment_attempts WHERE booking_id = ?`, id); n != 1 {
+			t.Fatalf("payment attempts = %d, want 1", n)
+		}
+		if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
+			t.Fatalf("confirmed = %d, want 4", n)
+		}
+	})
 }
 
 // EC-10: two identical creates at the same instant.
 func TestConcurrentDuplicateCreate(t *testing.T) {
-	f := fixture.New(t)
-	st := booking.New(f.DB)
-	class := f.Class(4, 0)
-	parent := f.Parent()
-	student := f.Student(parent)
+	t.Run("EC-10 two identical creates at the same instant", func(t *testing.T) {
+		f := fixture.New(t)
+		st := booking.New(f.DB)
+		class := f.Class(4, 0)
+		parent := f.Parent()
+		student := f.Student(parent)
 
-	var wg sync.WaitGroup
-	start := make(chan struct{})
-	errs := make([]error, 8)
-	for i := range errs {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			<-start
-			_, errs[i] = st.Create(ctx, parent, student, class)
-		}(i)
-	}
-	close(start)
-	wg.Wait()
-
-	var created int
-	for _, err := range errs {
-		switch {
-		case err == nil:
-			created++
-		case errors.Is(err, booking.ErrDuplicate):
-		default:
-			t.Fatalf("unexpected error: %v", err)
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		errs := make([]error, 8)
+		for i := range errs {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				<-start
+				_, errs[i] = st.Create(ctx, parent, student, class)
+			}(i)
 		}
-	}
-	if created != 1 {
-		t.Fatalf("created = %d, want 1", created)
-	}
+		close(start)
+		wg.Wait()
+
+		var created int
+		for _, err := range errs {
+			switch {
+			case err == nil:
+				created++
+			case errors.Is(err, booking.ErrDuplicate):
+			default:
+				t.Fatalf("unexpected error: %v", err)
+			}
+		}
+		if created != 1 {
+			t.Fatalf("created = %d, want 1", created)
+		}
+	})
 }
 
 // EC-21: the seat count reads the capacity column, and 4 is not hardcoded.
 func TestCapacityNeverExceeded(t *testing.T) {
-	for _, capacity := range []int{2, 4} {
-		t.Run(fmt.Sprintf("capacity_%d", capacity), func(t *testing.T) {
-			f := fixture.New(t)
-			st := booking.New(f.DB)
-			class := f.Class(capacity, 0)
+	t.Run("EC-21 a class of capacity 2 and of 4", func(t *testing.T) {
+		for _, capacity := range []int{2, 4} {
+			t.Run(fmt.Sprintf("capacity_%d", capacity), func(t *testing.T) {
+				f := fixture.New(t)
+				st := booking.New(f.DB)
+				class := f.Class(capacity, 0)
 
-			ids := make([]string, 20)
-			for i := range ids {
-				ids[i] = f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
-			}
-			results := payTogether(t, st, ids)
+				ids := make([]string, 20)
+				for i := range ids {
+					ids[i] = f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
+				}
+				results := payTogether(t, st, ids)
 
-			if n := countStatus(results, booking.StatusConfirmed); n != capacity {
-				t.Fatalf("confirmed = %d, want %d", n, capacity)
-			}
-			if n := countStatus(results, booking.StatusCancelled); n != 20-capacity {
-				t.Fatalf("seat_taken = %d, want %d", n, 20-capacity)
-			}
-		})
-	}
+				if n := countStatus(results, booking.StatusConfirmed); n != capacity {
+					t.Fatalf("confirmed = %d, want %d", n, capacity)
+				}
+				if n := countStatus(results, booking.StatusCancelled); n != 20-capacity {
+					t.Fatalf("seat_taken = %d, want %d", n, 20-capacity)
+				}
+			})
+		}
+	})
 }
 
 // EC-23: a guard that refuses everything passes every capacity test above, so this one checks that
 // two payers for two free seats both win.
 func TestConcurrentDistinctSeats(t *testing.T) {
-	f := fixture.New(t)
-	st := booking.New(f.DB)
-	class := f.Class(2, 0)
+	t.Run("EC-23 two payers, two free seats", func(t *testing.T) {
+		f := fixture.New(t)
+		st := booking.New(f.DB)
+		class := f.Class(2, 0)
 
-	ids := []string{
-		f.Booking(f.Student(f.Parent()), class, booking.StatusPending),
-		f.Booking(f.Student(f.Parent()), class, booking.StatusPending),
-	}
-	results := payTogether(t, st, ids)
-	if n := countStatus(results, booking.StatusConfirmed); n != 2 {
-		t.Fatalf("confirmed = %d, want 2", n)
-	}
+		ids := []string{
+			f.Booking(f.Student(f.Parent()), class, booking.StatusPending),
+			f.Booking(f.Student(f.Parent()), class, booking.StatusPending),
+		}
+		results := payTogether(t, st, ids)
+		if n := countStatus(results, booking.StatusConfirmed); n != 2 {
+			t.Fatalf("confirmed = %d, want 2", n)
+		}
+	})
 }
 
 // EC-22: one goroutine books while another takes the last seat. Either order is fine.
 func TestConcurrentCreateAndConfirm(t *testing.T) {
-	f := fixture.New(t)
-	st := booking.New(f.DB)
-	class := f.Class(4, 3)
-	holder := f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
-	parent := f.Parent()
-	student := f.Student(parent)
+	t.Run("EC-22 create while another goroutine confirms", func(t *testing.T) {
+		f := fixture.New(t)
+		st := booking.New(f.DB)
+		class := f.Class(4, 3)
+		holder := f.Booking(f.Student(f.Parent()), class, booking.StatusPending)
+		parent := f.Parent()
+		student := f.Student(parent)
 
-	var wg sync.WaitGroup
-	start := make(chan struct{})
-	wg.Add(2)
-	go func() { defer wg.Done(); <-start; st.Pay(ctx, holder, true) }()
-	go func() { defer wg.Done(); <-start; st.Create(ctx, parent, student, class) }()
-	close(start)
-	wg.Wait()
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		wg.Add(2)
+		go func() { defer wg.Done(); <-start; st.Pay(ctx, holder, true) }()
+		go func() { defer wg.Done(); <-start; st.Create(ctx, parent, student, class) }()
+		close(start)
+		wg.Wait()
 
-	if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
-		t.Fatalf("confirmed = %d, want 4", n)
-	}
+		if n := f.Count(`SELECT COUNT(*) FROM bookings WHERE class_id = ? AND status = 'confirmed'`, class); n != 4 {
+			t.Fatalf("confirmed = %d, want 4", n)
+		}
+	})
 }
 
 // The demo seed is data, so it is tested like data.
+// Each subtest is named for its row in the brief checklist, so scripts/brief-check.sh reads the
+// result from the test log and writes no SQL of its own.
 func TestSeedMeetsBrief(t *testing.T) {
 	f := fixture.New(t)
 	if _, err := f.DB.Exec(store.Seed); err != nil {
@@ -363,16 +379,20 @@ func TestSeedMeetsBrief(t *testing.T) {
 		query string
 		want  int
 	}{
-		{"a class with seats available", `SELECT COUNT(*) FROM trial_classes c WHERE (SELECT COUNT(*) FROM bookings b WHERE b.class_id = c.id AND b.status = 'confirmed') < c.capacity`, 2},
-		{"a class with exactly 3 confirmed", `SELECT COUNT(*) FROM trial_classes c WHERE (SELECT COUNT(*) FROM bookings b WHERE b.class_id = c.id AND b.status = 'confirmed') = 3`, 1},
-		{"a child already booked, so a duplicate is reachable", `SELECT COUNT(*) FROM bookings WHERE status = 'confirmed' AND class_id = 'c1'`, 1},
-		{"a payment failure case", `SELECT COUNT(*) FROM bookings WHERE status = 'payment_failed'`, 1},
-		{"a parent with 3 children, so choosing a child is a real choice", `SELECT COUNT(*) >= 1 FROM (SELECT parent_id FROM students GROUP BY parent_id HAVING COUNT(*) >= 3)`, 1},
+		{"C1 a science class and a math class", `SELECT (SELECT EXISTS(SELECT 1 FROM trial_classes WHERE subject LIKE '%Math%')) + (SELECT EXISTS(SELECT 1 FROM trial_classes WHERE subject LIKE '%Science%'))`, 2},
+		{"C3 every class is capped at 4", `SELECT COUNT(*) FROM trial_classes WHERE capacity != 4`, 0},
+		{"S2 a class with seats available", `SELECT COUNT(*) FROM trial_classes c WHERE (SELECT COUNT(*) FROM bookings b WHERE b.class_id = c.id AND b.status = 'confirmed') < c.capacity`, 2},
+		{"S3 a class with exactly 3 confirmed", `SELECT COUNT(*) FROM trial_classes c WHERE (SELECT COUNT(*) FROM bookings b WHERE b.class_id = c.id AND b.status = 'confirmed') = 3`, 1},
+		{"S4 a child already booked, so a duplicate is reachable", `SELECT COUNT(*) FROM bookings WHERE status = 'confirmed' AND class_id = 'c1'`, 1},
+		{"S5 a payment failure case", `SELECT COUNT(*) FROM bookings WHERE status = 'payment_failed'`, 1},
+		{"B1 a parent with 3 children, so choosing a child is a real choice", `SELECT COUNT(*) >= 1 FROM (SELECT parent_id FROM students GROUP BY parent_id HAVING COUNT(*) >= 3)`, 1},
 	}
 	for _, c := range checks {
-		if got := f.Count(c.query); got != c.want {
-			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			if got := f.Count(c.query); got != c.want {
+				t.Errorf("got %d, want %d", got, c.want)
+			}
+		})
 	}
 }
 

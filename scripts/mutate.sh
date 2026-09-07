@@ -7,8 +7,9 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 pass=0
 fail=0
 
-# An expected test name means a test must fail. The word SURVIVES means the guard is defence in
-# depth behind a stronger one, so no test can reach it, and the script must not call that a pass.
+# An expected test name means that test must fail.
+# The word SURVIVES means the guard is defence in depth behind a stronger one.
+# No test can reach such a guard, and the script must not call that a pass.
 run_mutation() {
   local name=$1 expect=$2 edit=$3
   local work

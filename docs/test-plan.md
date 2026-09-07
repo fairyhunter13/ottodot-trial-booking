@@ -63,10 +63,15 @@ the demo breaks a test that has nothing to do with the demo.
 - Test data is built **per test, in Go**, from an empty schema. A test states the state it needs and
   nothing else.
 
-The seed is not trusted either. `TestSeedMeetsBrief` loads `seed.sql` and asserts the four asked
-cases are really in it: a class with free seats, a class with exactly 3 confirmed students, a child
-already booked so a duplicate attempt is reachable, and a `payment_failed` row. So the demo cannot
-rot silently, and no other test depends on it.
+The seed is not trusted either. `TestSeedMeetsBrief` loads `seed.sql` and asserts that the four
+asked cases are really in it:
+
+- a class with free seats
+- a class with exactly 3 confirmed students
+- a child already booked, so a duplicate attempt is reachable
+- a `payment_failed` row
+
+So the demo cannot rot silently, and no other test depends on it.
 
 ### The fixture builder
 
@@ -129,9 +134,9 @@ template or a wrong status code, and both are failures a reviewer would hit.
 
 ### Layer 3 — one integration test
 
-`TestParentJourney` walks the demo path over HTTP: open the page, book a seat, pay and fail, book
-again, pay and succeed, then read the roster and find the child. It is the same path as the video, so
-a green test proves the demo works.
+`TestParentJourney` walks the demo path over HTTP. It opens the page, books a seat, pays and fails,
+books again, pays and succeeds, then reads the roster and finds the child. It is the same path as the
+video, so a green test proves the demo works.
 
 ## Proof that a case is handled, and not only tested
 
@@ -154,10 +159,10 @@ capacity test, so the suite must also fail when the code refuses too much.
 
 The fifth mutation survives, and that is reported rather than hidden. `Pay` reads the booking status
 inside the same `BEGIN IMMEDIATE` transaction that later writes it, and that transaction holds the
-write lock for its whole life. So the read and the write are already one step, and the status guard
-in the `UPDATE` is a second line of defence behind a stronger first one. No test can reach past the
-first guard to observe the second, so no test is written that pretends to. The guard stays, because
-it keeps `settle` safe for a caller that does not hold the same transaction.
+write lock for its whole life. So the read and the write are already one step. The status guard in
+the `UPDATE` is then a second line of defence behind a stronger first one. No test can reach past the
+first guard to see the second, so no test is written that pretends to. The guard stays, because it
+keeps `settle` safe for a caller that does not hold the same transaction.
 
 Every other mutation the suite survives is a hole in the tests, and not a pass. Where one appears,
 the missing test is written first, then the run repeats.
@@ -173,5 +178,20 @@ order is fixed:
 4. Re-run `scripts/mutate.sh` in full, because a fix in one place often weakens a guard somewhere
    else.
 
-Commands: `go vet ./...`, `go test ./... -race -count=1`, `scripts/mutate.sh`. GitHub Actions runs
-all three on push, so the result does not depend on one machine.
+## The brief checker
+
+`scripts/mutate.sh` asks whether a test holds its guard. `scripts/brief-check.sh` asks a different
+question: does the repo still answer each line of the brief?
+
+Every line of the brief is one row. A row names a check, and it names the break that must make that
+check fail. `./scripts/brief-check.sh` runs every check against the real tree. `--honest` copies the
+tree, applies one row's break inside the copy, and runs that row's check again there. A row that
+still passes is decoration, and the run fails.
+
+A row reads a file or the test log, and never a claim. Where a row covers an edge case, it asserts
+that the named subtest ran and passed. So the checker proves presence and wiring, and it does not
+grade the quality of the prose behind a heading.
+
+Commands: `go vet ./...`, `go test ./... -race -count=1`, `scripts/mutate.sh`,
+`scripts/brief-check.sh` and `scripts/brief-check.sh --honest`. GitHub Actions runs all five on
+push, so the result does not depend on one machine.

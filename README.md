@@ -1,7 +1,7 @@
 # Ottodot trial booking
 
-A trial class booking slice. A parent picks a child and a trial class, pays a mock payment, and sees
-the booking status. A teacher reads the roster. 4 seats per class.
+One slice of the trial booking flow. A parent picks a child and a trial class, pays a mock payment,
+and sees the booking status. A teacher reads the roster. 4 seats per class.
 
 The plans written before the code are in [docs/development-plan.md](docs/development-plan.md) and
 [docs/test-plan.md](docs/test-plan.md).
@@ -13,7 +13,7 @@ go run .                       # http://localhost:8080
 go run . -addr :9000 -db /tmp/trial.db -keep
 ```
 
-Go 1.22 or newer. One dependency, `modernc.org/sqlite`, which is pure Go, so there is no cgo and no
+Go 1.25 or newer. One dependency, `modernc.org/sqlite`, which is pure Go, so there is no cgo and no
 database to install. Every start rebuilds and reseeds `data.db`, so the demo state is the same each
 time. `-keep` skips the reset.
 
@@ -23,6 +23,8 @@ Verify:
 go vet ./...
 go test ./... -race -count=3
 ./scripts/mutate.sh
+./scripts/brief-check.sh
+./scripts/brief-check.sh --honest
 ```
 
 ## What I built
@@ -53,8 +55,8 @@ CREATE UNIQUE INDEX one_active_booking ON bookings(student_id, class_id)
 ```
 
 A `payment_failed` or `cancelled` row falls out of that index, so a parent can book again after a
-failure. A repeated form submit is caught by the same index, and the handler turns it into a 409 and
-never a 500.
+failure. The same index catches a repeated form submit. The handler turns it into a 409, and never
+a 500.
 
 ## Backend design
 
@@ -85,10 +87,10 @@ A `pending_payment` booking holds **no** seat. Only `confirmed` counts against c
 
 ### How duplicates are prevented
 
-The partial unique index above. The rule is stricter than the brief asks: the brief forbids duplicate
-*confirmed* bookings, and this index also blocks a second *pending* booking for the same child and
-class. That kills a real double-submit. It costs a parent the ability to hold two payment attempts
-for one class at once, which is a tradeoff I took on purpose.
+The partial unique index above. The rule is stricter than the brief asks. The brief forbids a
+duplicate *confirmed* booking. The index also blocks a second *pending* booking for the same child
+and class. That kills a real double-submit. It costs a parent the ability to hold two payment
+attempts for one class at once, and I took that tradeoff on purpose.
 
 ### How payment failure is handled
 
@@ -110,10 +112,10 @@ extra table, and the guarantee comes from the database rather than from careful 
 - A parent can be charged and still lose the seat. The loser ends `cancelled` with
   `reason = 'seat_taken'`, and the attempt row is flagged `refund_required`. **The refund itself is
   not built.** The debt is recorded, and a real system would drain that flag from a job.
-- A seat hold with a TTL would never double-charge, but it leaks a seat whenever a parent abandons a
+- A seat hold with a TTL never double-charges. But it leaks a seat when a parent abandons a
   checkout, and it needs an expiry job. That is the "next step" and not the build.
 - `BEGIN IMMEDIATE` serializes every confirm, for the whole database and not for one class. At this
-  size that is free. It is the first thing that would have to change under load.
+  size that is free. It is the first thing to change under load.
 
 ### Which check belongs where
 
@@ -136,12 +138,12 @@ Three layers, and the invariants are re-checked after every single test.
 | endpoint tests | `internal/web` | status codes, templates, the JSON shape |
 | one journey test | `internal/web` | the whole demo path over HTTP |
 
-`fixture.AssertInvariants` runs through `t.Cleanup` after every test. It fails the test when any
-class is over capacity or any child holds two live bookings, even where that test was looking at
+`fixture.AssertInvariants` runs through `t.Cleanup` after every test. It fails a test when any class
+is over capacity, or when any child holds two live bookings. The test fails even where it looked at
 something else.
 
-Every edge case carries an id, and the id is the subtest name, so the coverage list is the test
-output rather than a claim in this file:
+Every edge case carries an id, and the id is the subtest name. So the coverage list is the test
+output, and not a claim in this file:
 
 ```
 $ go test ./internal/booking/ -v -run 'TestCreate|TestPayStates'
@@ -154,6 +156,10 @@ $ go test ./internal/booking/ -v -run 'TestCreate|TestPayStates'
 ```
 
 The full list of ids is in [docs/test-plan.md](docs/test-plan.md).
+
+`scripts/brief-check.sh` is a second checker, and it grades this repo against the brief and not
+against the code. Each line of the brief is one row. `--honest` breaks each row in a copy of the
+tree, and a row that still passes there is decoration.
 
 ### Proof that the guards work
 
@@ -169,12 +175,11 @@ CAUGHT   seat count off by one              by TestCapacityNeverExceeded
 CAUGHT   confirm always loses the seat      by TestConcurrentDistinctSeats
 ```
 
-The fourth mutation is the one that catches an over-strict guard: a lock that refuses *every* booking
-would pass every capacity test, so `TestConcurrentDistinctSeats` asserts that two payers for two free
-seats both win.
+The fourth mutation catches an over-strict guard. A lock that refuses *every* booking passes every
+capacity test. So `TestConcurrentDistinctSeats` asserts that two payers for two free seats both win.
 
 The survivor is reported and not hidden. That guard is a second line of defence behind the
-transaction, so no test can reach past the first one to observe it. The reasoning is in
+transaction. No test can reach past the transaction to see the guard. The reasoning is in
 [docs/test-plan.md](docs/test-plan.md).
 
 ## Seed data
@@ -198,7 +203,7 @@ curl localhost:8080/api/classes/c2/roster
 
 ## Assumptions
 
-- No authentication. The parent is chosen by a link, because auth is not what this task grades.
+- No authentication. A link names the parent, because auth is not what this task grades.
 - The payment provider is a button. A real one is asynchronous, and the webhook would land where
   `Pay` is now.
 - One process, one SQLite file. The invariants move to Postgres unchanged: the partial index is the

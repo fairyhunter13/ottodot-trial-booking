@@ -124,8 +124,8 @@ func (s *Store) Create(ctx context.Context, parentID, studentID, classID string)
 // Pay records a payment attempt and settles the booking.
 //
 // The seat count and the status change run inside one BEGIN IMMEDIATE transaction, so two payers
-// competing for the last seat cannot both win. The loser is cancelled with reason seat_taken and
-// the attempt is flagged for a refund.
+// cannot both win the last seat. The loser is cancelled with reason seat_taken, and the attempt is
+// flagged for a refund.
 func (s *Store) Pay(ctx context.Context, bookingID string, success bool) (Booking, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {

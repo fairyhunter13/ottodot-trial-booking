@@ -1,3 +1,4 @@
 data.db
 data.db-wal
 data.db-shm
+.brief-check.log

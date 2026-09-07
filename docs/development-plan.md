@@ -35,7 +35,7 @@ BEGIN IMMEDIATE;                                      -- no overbooking
 COMMIT;
 ```
 
-A pending booking holds no seat. The count runs at confirm time inside the write transaction, and
+A pending booking holds no seat. The count runs at confirm time, inside the write transaction.
 `BEGIN IMMEDIATE` takes the write lock before the read, so the check and the write are one step.
 
 A `payment_failed` or `cancelled` row falls out of the partial index, so the parent can try again.
@@ -60,8 +60,8 @@ step" and not the build.
 | `GET /classes/{id}/roster` | roster page | 404 |
 | `GET /api/classes/{id}/roster` | JSON, confirmed only | 404 |
 
-A second pay submit on a booking that is already confirmed is a no-op and returns the same 303, so a
-double-clicked form is not an error the parent has to read. A pay submit on a `payment_failed` or
+A second pay submit on a confirmed booking changes nothing, and it returns the same 303. So a
+double-clicked form is not an error the parent must read. A pay submit on a `payment_failed` or
 `cancelled` booking is a 409, because that booking is finished and the parent must book again.
 
 The pay form carries `outcome=success|fail`, so a payment failure is one click. There is no cancel
@@ -69,9 +69,13 @@ endpoint: a failed payment is the retry path, and one fewer route is one fewer t
 
 ## Seed data
 
-`c1` free · `c2` 3 confirmed, the race demo · `c3` full · one confirmed booking so the duplicate case
-is one click · one `payment_failed` row · one parent with 3 children, so "choose a child" is a real
-choice · more than one parent, so the wrong-parent case is reachable.
+- `c1` has free seats.
+- `c2` holds 3 confirmed students, and it is the race demo.
+- `c3` is full.
+- One booking is already confirmed, so the duplicate case is one click.
+- One booking is `payment_failed`.
+- One parent has 3 children, so "choose a child" is a real choice.
+- More than one parent exists, so the wrong-parent case is reachable.
 
 Every `go run .` rebuilds and reseeds the demo database, so the reviewer sees the same state each
 time. `-keep` skips the reset.

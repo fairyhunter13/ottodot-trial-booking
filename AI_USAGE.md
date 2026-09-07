@@ -15,9 +15,9 @@ code, the tests, and these documents.
 ## One place where AI moved me faster
 
 The test fixture and the table-driven tests. There are 23 numbered edge cases in
-`docs/test-plan.md`. Written by hand each one would have been its own setup block. The model built
-`internal/fixture` first, so each case became one table row and one line of setup, and I could read
-the whole list on one screen and see what was missing.
+`docs/test-plan.md`. By hand, each one is its own setup block. The model built `internal/fixture`
+first, so each case became one table row and one line of setup. I could then read the whole list on
+one screen, and see what was missing.
 
 The same is true of `fixture.AssertInvariants`. It runs after every test through `t.Cleanup`, so a
 test that breaks a database rule fails even where that test was looking at something else. That is
@@ -28,15 +28,15 @@ one helper covering cases nobody wrote a test for.
 Several, and they are the reason the tests look the way they do.
 
 1. **The first plan was unit tests only.** I asked where the integration tests and the endpoint tests
-   were. That is how the three layers exist: a package test never sees a broken template or a wrong
-   status code, and a reviewer would hit both.
+   were. That is how the three layers exist. A package test never sees a broken template or a wrong
+   status code, and a reviewer hits both.
 2. **A list of test names is not proof.** I asked how a case gets configured, tested, fixed, and
    *proved*. A green suite proves nothing on its own, because a test that passes against broken code
    is worthless. That question produced `scripts/mutate.sh`, which breaks one guard at a time and
    checks a named test notices.
-3. **The capacity tests were all one-sided.** When I pushed on the edge cases again, the audit found
-   that a guard which refuses *every* booking would pass every capacity test written at that point.
-   `EC-23` and a fifth mutation were added for that: two payers, two free seats, and both must win.
+3. **The capacity tests were all one-sided.** I pushed on the edge cases again. The audit then found
+   that a guard which refuses *every* booking passes every capacity test written at that point.
+   `EC-23` and a fifth mutation answer that: two payers, two free seats, and both must win.
 4. **The plan was not in the repo.** The model kept the development plan and the test plan in a
    private scratch file. I asked why, since the brief grades the explanation. They are now
    `docs/development-plan.md` and `docs/test-plan.md`.
@@ -47,8 +47,7 @@ Several, and they are the reason the tests look the way they do.
 ## What I would change about my AI workflow
 
 I would ask "how will you *prove* this works" in the first prompt rather than the fifth. Every real
-improvement in this repo came from that question, and asking it early would have saved two rounds of
-planning.
+improvement in this repo came from that question. The early question saves two rounds of planning.
 
 I would also ask for the plan as a repo file from the start. Keeping it in a scratch file made it
 invisible to me and to the reviewer.
