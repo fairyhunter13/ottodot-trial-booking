@@ -1,0 +1,177 @@
+# Test plan
+
+The build plan is in [development-plan.md](development-plan.md).
+
+## Edge cases
+
+Each case carries an id. The id is the subtest name, so the coverage list is the test output and not
+a claim in a document.
+
+```
+go test ./internal/... -v -run 'TestCreate|TestPayStates'
+```
+
+### Create
+
+| Id | Case | Expected |
+| --- | --- | --- |
+| EC-01 | first booking | `pending_payment` |
+| EC-02 | duplicate against a pending row | refused |
+| EC-03 | duplicate against a confirmed row | refused |
+| EC-04 | retry after a failed payment | allowed |
+| EC-05 | retry after a lost seat | allowed |
+| EC-06 | class is already full | refused early |
+| EC-07 | unknown child | 404 |
+| EC-08 | unknown class | 404 |
+| EC-09 | child of another parent | 403 |
+| EC-10 | two identical creates at the same instant | one row, the rest refused as duplicates, never a 500 |
+| EC-20 | class has already started | refused |
+
+### Pay
+
+| Id | Case | Expected |
+| --- | --- | --- |
+| EC-11 | success on the last seat | `confirmed` |
+| EC-12 | failure | `payment_failed`, roster untouched, attempt row written |
+| EC-13 | the same pay form submitted twice | second submit changes nothing and charges nothing |
+| EC-14 | success after the seat is gone | `cancelled`, `seat_taken`, `refund_required` |
+| EC-15 | pay on a `payment_failed` row | refused |
+| EC-16 | pay on a `cancelled` row | refused |
+| EC-17 | unknown booking | 404 |
+| EC-18 | many payers, one seat | exactly one winner |
+| EC-19 | two pays on the same booking at once | one confirm, one charge |
+| EC-21 | a class of capacity 2 | stops at 2, so 4 is not hardcoded |
+| EC-22 | one goroutine creates while another confirms the last seat | either order, invariant holds |
+| EC-23 | two payers, two free seats | **both** confirm |
+
+`EC-23` is the case an earlier draft of this plan missed. Every capacity test above still passes if
+the guard refuses everything, so without `EC-23` an over-strict lock reads as correct.
+
+### Roster and money
+
+Pending, failed and cancelled rows never appear on a roster. An unknown class is a 404. A
+`payment_failed` row must not carry `refund_required`, and a `seat_taken` row must.
+
+## Three layers, two datasets
+
+### Two datasets, and why they are not one
+
+The demo seed and the test data answer different questions. Where one file serves both, a change to
+the demo breaks a test that has nothing to do with the demo.
+
+- `seed.sql` is the **demo** dataset. It exists for `go run .` and for the video.
+- Test data is built **per test, in Go**, from an empty schema. A test states the state it needs and
+  nothing else.
+
+The seed is not trusted either. `TestSeedMeetsBrief` loads `seed.sql` and asserts the four asked
+cases are really in it: a class with free seats, a class with exactly 3 confirmed students, a child
+already booked so a duplicate attempt is reachable, and a `payment_failed` row. So the demo cannot
+rot silently, and no other test depends on it.
+
+### The fixture builder
+
+`internal/fixture`. It is the reason 23 cases do not become 23 setup blocks.
+
+```go
+f := fixture.New(t)                    // temp db, schema applied, empty
+c := f.Class(4, 3)                     // capacity 4, already holding 3 confirmed students
+s := f.Student(f.Parent())
+b := f.Booking(s, c, "pending_payment")
+```
+
+### The invariant net
+
+`fixture.AssertInvariants` runs after every test through `t.Cleanup`. It is two SQL queries: no class
+holds more confirmed rows than its capacity, and no child holds two live rows for one class. A test
+that breaks an invariant fails, even where that test was looking at something else. So one helper
+covers cases nobody wrote a test for.
+
+### Concurrency tests that fail for the right reason
+
+- The DSN carries `busy_timeout(5000)`, `journal_mode(WAL)` and `foreign_keys(1)`. Without the busy
+  timeout a second writer gets `SQLITE_BUSY` at once, and the test reports a lock error rather than a
+  lost race. `TestSchemaPragmas` asserts these, so a typo in the DSN fails a test instead of silently
+  turning off a guard.
+- Every goroutine waits on one closed channel, so they fire together instead of in a queue.
+- The concurrency tests run under `-race` and `-count=5`, because a race that appears one run in
+  three is still a race.
+
+### Layer 1 — package tests (`internal/booking`)
+
+Against a real SQLite file, no HTTP.
+
+| Test | Asserts |
+| --- | --- |
+| `TestCreate` | table-driven over the create cases, each with its expected error |
+| `TestPayStates` | table-driven over the pay cases, each with its end status |
+| `TestDoublePayIsNoop` | EC-13: pay twice → one confirm, one seat, no second charge |
+| `TestScriptedLastSeat` | the brief's 4 steps in order: B confirms, A gets `seat_taken`, class holds 4 |
+| `TestConcurrentLastSeat` | EC-18: 3 confirmed, 16 goroutines pay at once → exactly 1 winner |
+| `TestConcurrentSameBooking` | EC-19: 8 goroutines pay one booking → 1 confirm, 1 charge |
+| `TestConcurrentDuplicateCreate` | EC-10: 8 goroutines create the same child and class → 1 row |
+| `TestCapacityNeverExceeded` | EC-21: 20 children against a class of 2 and of 4 |
+| `TestConcurrentDistinctSeats` | EC-23: 2 payers, 2 seats, both confirm |
+| `TestConcurrentCreateAndConfirm` | EC-22 |
+| `TestSeedMeetsBrief` | the demo dataset really holds the four asked cases |
+| `TestSchemaPragmas` | `foreign_keys` on, journal mode WAL |
+
+### Layer 2 — endpoint tests (`internal/web`)
+
+Through `httptest`, over the real router and the real templates. A package test never sees a broken
+template or a wrong status code, and both are failures a reviewer would hit.
+
+| Test | Asserts |
+| --- | --- |
+| `TestRoutesStatusCodes` | table-driven: every row of the route table, its code and its body text |
+| `TestEveryTemplateRenders` | each page returns 200 and holds a known string, so no template panics |
+| `TestRosterJSON` | exact JSON shape, confirmed children only |
+| `TestHTTPLastSeatRace` | the brief's scenario through two HTTP clients |
+
+### Layer 3 — one integration test
+
+`TestParentJourney` walks the demo path over HTTP: open the page, book a seat, pay and fail, book
+again, pay and succeed, then read the roster and find the child. It is the same path as the video, so
+a green test proves the demo works.
+
+## Proof that a case is handled, and not only tested
+
+A green suite is not proof. A test that passes against broken code proves nothing, so each guard has
+a mutation that must break a named test.
+
+`scripts/mutate.sh` copies the tree to a temp directory, applies one edit, runs the suite, records
+which tests failed, and throws the copy away. The working tree is never edited.
+
+| Mutation | The guard it removes | Result |
+| --- | --- | --- |
+| `BEGIN IMMEDIATE` → `BEGIN` | atomic count and write | caught by `TestConcurrentLastSeat` |
+| drop `one_active_booking` | duplicate prevention | caught by `TestCreate` |
+| `count < capacity` → `count <= capacity` | the seat count itself | caught by `TestCapacityNeverExceeded` |
+| confirm always returns `seat_taken` | the happy path | caught by `TestConcurrentDistinctSeats` |
+| drop `AND status='pending_payment'` | second confirm of one booking | **survives, by design** |
+
+The fourth mutation catches an over-strict guard. A lock that refuses every booking satisfies every
+capacity test, so the suite must also fail when the code refuses too much.
+
+The fifth mutation survives, and that is reported rather than hidden. `Pay` reads the booking status
+inside the same `BEGIN IMMEDIATE` transaction that later writes it, and that transaction holds the
+write lock for its whole life. So the read and the write are already one step, and the status guard
+in the `UPDATE` is a second line of defence behind a stronger first one. No test can reach past the
+first guard to observe the second, so no test is written that pretends to. The guard stays, because
+it keeps `settle` safe for a caller that does not hold the same transaction.
+
+Every other mutation the suite survives is a hole in the tests, and not a pass. Where one appears,
+the missing test is written first, then the run repeats.
+
+## The fix loop
+
+A failing case is fixed in the layer the layer table names, and never in two layers at once. The
+order is fixed:
+
+1. Write the failing test.
+2. Fix the code.
+3. `go test ./... -race`.
+4. Re-run `scripts/mutate.sh` in full, because a fix in one place often weakens a guard somewhere
+   else.
+
+Commands: `go vet ./...`, `go test ./... -race -count=1`, `scripts/mutate.sh`. GitHub Actions runs
+all three on push, so the result does not depend on one machine.

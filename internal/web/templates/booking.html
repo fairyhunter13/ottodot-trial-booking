@@ -1,0 +1,24 @@
+<!doctype html>
+<title>Booking {{.Booking.ID}}</title>
+<h1>Booking status</h1>
+
+<p>{{.Booking.StudentName}} &mdash; {{.Booking.ClassName}}</p>
+<p>Status: <b>{{.Booking.Status}}</b>{{if .Booking.Reason}} ({{.Booking.Reason}}){{end}}</p>
+
+{{if eq .Booking.Status "pending_payment"}}
+  <h2>Mock payment</h2>
+  <form method="post" action="/bookings/{{.Booking.ID}}/pay">
+    <button name="outcome" value="success" type="submit">Pay (success)</button>
+    <button name="outcome" value="fail" type="submit">Pay (failure)</button>
+  </form>
+{{end}}
+
+{{if eq .Booking.Reason "seat_taken"}}
+  <p>Another parent confirmed the last seat first. The payment is flagged for a refund.</p>
+{{end}}
+
+{{if eq .Booking.Status "payment_failed"}}
+  <p>The payment failed, so the child is not on the roster. You can book the class again.</p>
+{{end}}
+
+<p><a href="/">Back</a> &middot; <a href="/classes/{{.Booking.ClassID}}/roster">Class roster</a></p>

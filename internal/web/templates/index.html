@@ -1,0 +1,28 @@
+<!doctype html>
+<title>Book a trial class</title>
+<h1>Book a trial class</h1>
+
+<p>Parent:
+{{range .Parents}}<a href="/?parent={{.ID}}">{{.Name}}</a> {{end}}
+&mdash; showing <b>{{.Parent.Name}}</b></p>
+
+<form method="post" action="/bookings">
+  <input type="hidden" name="parent_id" value="{{.Parent.ID}}">
+
+  <h2>Child</h2>
+  {{range .Parent.Children}}
+    <label><input type="radio" name="student_id" value="{{.ID}}" required> {{.Name}} ({{.Grade}})</label><br>
+  {{end}}
+
+  <h2>Trial class</h2>
+  {{range .Classes}}
+    <label>
+      <input type="radio" name="class_id" value="{{.ID}}" required {{if .Full}}disabled{{end}}>
+      {{.Subject}} &mdash; {{.StartsAt}} &mdash;
+      {{if .Full}}full{{else}}{{.SeatsLeft}} of {{.Capacity}} seats left{{end}}
+    </label>
+    <a href="/classes/{{.ID}}/roster">roster</a><br>
+  {{end}}
+
+  <p><button type="submit">Book trial</button></p>
+</form>

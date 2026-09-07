@@ -1,0 +1,17 @@
+<!doctype html>
+<title>Roster {{.Class.Subject}}</title>
+<h1>Teacher roster</h1>
+
+<p>{{.Class.Subject}} &mdash; {{.Class.StartsAt}} &mdash;
+   {{.Class.Confirmed}} of {{.Class.Capacity}} confirmed</p>
+
+<table border="1" cellpadding="4">
+  <tr><th>Child</th><th>Parent</th><th>Booking</th></tr>
+  {{range .Entries}}
+    <tr><td>{{.StudentName}}</td><td>{{.ParentName}}</td><td>{{.BookingID}}</td></tr>
+  {{else}}
+    <tr><td colspan="3">No confirmed students yet.</td></tr>
+  {{end}}
+</table>
+
+<p><a href="/api/classes/{{.Class.ID}}/roster">JSON</a> &middot; <a href="/">Back</a></p>
